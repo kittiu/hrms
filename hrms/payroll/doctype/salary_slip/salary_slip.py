@@ -1572,7 +1572,34 @@ class SalarySlip(TransactionBase):
 		return (taxable_earnings + opening_taxable_earning) - exempted_amount, exempted_amount
 
 	def get_opening_for(self, field_to_select, start_date, end_date):
-		return self._salary_structure_assignment.get(field_to_select) or 0
+		# Only if salary slip is same period as the first salary slip to use opening amount
+		first_ss = frappe.db.get_value(
+			"Salary Slip",
+			{
+				"employee": self.employee,
+				"docstatus": 1,
+				"company": self.company,
+			},
+			"name",
+			order_by="start_date asc",
+		)
+		if first_ss:
+			doc = frappe.get_cached_doc("Salary Slip", first_ss)
+			if self.payroll_period != doc.payroll_period:
+				return 0
+		# Otherwise, find amount from first SSA which has opening balance
+		ssa_opening = frappe.db.get_value(
+			"Salary Structure Assignment",
+			{
+				"employee": self.employee,
+				"docstatus": 1,
+				"company": self.company,
+				field_to_select: [">", 0],
+			},
+			field_to_select,
+			order_by="from_date asc",
+		)
+		return ssa_opening or 0
 
 	def get_salary_slip_details(
 		self,
